@@ -193,35 +193,3 @@ rs4970383 A -0.000004 0.000351 0.0325 0
 rs4475691 T -0.000013 0.000375 0.0270 0
 ...
 ```
-
-## How it works
-
-1. **Compile pQTL inputs** — collect per-protein summary statistics, gene metadata, and pQTL hotspot annotations.
-2. **Train protein weights** — fit SBayesRC models for each dataset and LD panel.
-3. **Compile GWAS inputs** — align GWAS summary statistics to the LD reference.
-4. **Compute PWAS statistics** — combine protein weights, GWAS Z-scores, and block LD to compute cis/trans Z-scores.
-5. **Correct and validate** — regress out co-regulation PCs, compare hits against burden and PoPS evidence.
-6. **Generate outputs** — produce validation tables, figures, and paper-ready summaries.
-
-## Project layout
-
-```text
-polypwas/
-├── src/polypwas/              # Library: LD, block stores, PWAS math, config
-├── analyses/                  # Production pipeline (see analyses/README.md)
-├── tests/                     # Smoke tests (require analyses/external/ data)
-├── pyproject.toml
-└── README.md
-```
-
-Key modules: `ld.BlockLDM` (block LD eigendecomposition), `store.BlockWgt` (parquet SNP×feature stores), `pwas.compute_pwas` / `pwas.sumstats_pwas` (PWAS computation), `config.get_config` (`~/.polypwas/config.yaml`).
-
-Production runs use `uv run python ...` scripts in `analyses/`; the full external data layout and pipeline stages are documented in [`analyses/README.md`](analyses/README.md).
-
-## Testing
-
-```bash
-uv run pytest
-```
-
-Tests rely on external resources under `analyses/external/` and are smoke tests for a configured research environment.
