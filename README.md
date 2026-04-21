@@ -2,17 +2,6 @@
 
 **Proteome-wide association studies with cis and trans pQTL weights**
 
-`polypwas` is a refactor of the internal TRANS-PWAS workflow into a cleaner Python package plus an analysis pipeline. It is built for large-scale PWAS runs that combine:
-
-- block LD resources from [SBayesRC](https://github.com/zhilizheng/SBayesRC)
-- protein weights trained from cis and trans pQTL summary statistics
-- GWAS summary statistics aligned to the same SNP reference
-
-The repository has two layers:
-
-- `src/polypwas/` contains reusable LD, weight-store, and PWAS computation code
-- `analyses/` contains the end-to-end production pipeline used to compile inputs, run PWAS, validate signals, and build manuscript assets
-
 ## Prerequisites
 
 ### R and SBayesRC
@@ -193,3 +182,6 @@ rs4970383 A -0.000004 0.000351 0.0325 0
 rs4475691 T -0.000013 0.000375 0.0270 0
 ...
 ```
+
+## Notes
+This was developed with assistance from Claude Code and Codex.
