@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+
+# Data files
+*.parquet
+*.tsv.gz
+*.csv.gz
+*.ma
+*.ma.gz
+*.bgen
+*.bed
+*.bim
+*.fam
+*.pgen
+*.pvar
+*.psam
+*.sscore
+*.pkl
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.xlsx
+
+# Analysis data directories
+analyses/external/
+analyses/*/DATA/
+data/downloads/
+data/ldm/ukbEUR_HM3/
+
+# Public demo data
+data/examples/ldl.ma
+data/examples/angptl3.gene.tsv
+data/examples/angptl3.pqtl.tsv
+data/examples/angptl3.demo_weights.tsv
+
+# Submitit logs
+submitit-logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Notebook system
+notebook/
+angptl3.wgts.gz
