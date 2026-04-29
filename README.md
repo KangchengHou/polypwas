@@ -1,6 +1,9 @@
 # polypwas
 
-**Proteome-wide association studies with cis and trans pQTL weights**
+Code base for [Functionally informed cis and trans proteome-wide association studies prioritize disease-critical genes](https://www.medrxiv.org/content/10.64898/2026.04.24.26351667v1).
+
+> **Note:** This repository is still under active development.
+
 
 ## Prerequisites
 
@@ -184,4 +187,4 @@ rs4475691 T -0.000013 0.000375 0.0270 0
 ```
 
 ## Notes
-This was developed with assistance from Claude Code and Codex.
+This repository was developed with assistance from AI coding software, including Claude Code and Codex.
