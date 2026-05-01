@@ -1,0 +1,3 @@
+# Ignore all dataset contents (symlinks, downloaded data, intermediate files)
+*
+!.gitignore
