@@ -146,26 +146,6 @@ def test_cli_demo_path_outputs_expected_format(tmp_path: Path):
     assert re.fullmatch(r"CIS_Z=-?\d+\.\d+", lines[0])
     assert re.fullmatch(r"TRANS_Z=-?\d+\.\d+", lines[1])
 
-    pwas_result_with_coords = run_cli(
-        "assoc",
-        "--weights",
-        str(weights_path),
-        "--gwas",
-        str(EXAMPLES / "ldl.ma.gz"),
-        "--ldm-dir",
-        str(HM3_DIR),
-        "--gene-chr",
-        DEMO_COORDS["chrom"],
-        "--gene-start",
-        DEMO_COORDS["start"],
-        "--gene-end",
-        DEMO_COORDS["end"],
-        env_overrides=cli_env,
-    )
-    coord_lines = [
-        line.strip() for line in pwas_result_with_coords.stdout.splitlines() if line.strip()
-    ]
-    assert lines == coord_lines
 
 
 def test_cli_setup_writes_config(tmp_path: Path):

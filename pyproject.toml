@@ -9,13 +9,13 @@ dependencies = [
     "scipy",
     "pyyaml",
     "tqdm",
+    "pyarrow>=21.0.0",
 ]
 
 [project.optional-dependencies]
 full = [
     "statsmodels",
     "submitit>=1.5.4",
-    "pyarrow>=21.0.0",
     "pgenlib>=0.93.0",
     "scikit-learn>=1.6.1",
 ]

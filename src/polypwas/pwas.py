@@ -6,6 +6,7 @@ from tqdm import tqdm
 from typing import Union
 
 from .ld import BlockLDM, read_ldm
+from .store import BlockWgt
 from .utils import MultiTableReader, get_exon_mask
 
 
@@ -285,6 +286,99 @@ def compute_pwas(
         long_df = pd.merge(long_df, cov_dfs[mask], on=["TRAIT", "ID"])
     long_df = long_df[["TRAIT", "ID", *[f"{mask.upper()}_COV" for mask in subsets]]]
     return long_df
+
+
+def compute_pwas_z(
+    weights: Union[pd.DataFrame, BlockWgt],
+    gwas_z: pd.Series,
+    ldm: BlockLDM,
+    gene_info: pd.DataFrame,
+    cis_window: float = 1e6,
+    verbose: bool = False,
+) -> pd.DataFrame:
+    """Compute cis/trans PWAS Z-scores for many proteins against one GWAS.
+
+    Parameters
+    ----------
+    weights : pd.DataFrame or BlockWgt
+        Per-protein SNP weights. DataFrame must be indexed by SNP ID with one
+        column per protein. BlockWgt streams block by block.
+    gwas_z : pd.Series
+        GWAS Z-scores indexed by SNP ID, aligned to ``ldm.snp_info``.
+    ldm : BlockLDM
+        Block-eigen LD matrix.
+    gene_info : pd.DataFrame
+        Indexed by protein ID with columns CHROM, START, END.
+    cis_window : float
+        Cis window in bp.
+
+    Returns
+    -------
+    pd.DataFrame with columns ID, CIS_Z, TRANS_Z.
+    """
+    snp_info = ldm.snp_info
+    pids = list(gene_info.index)
+
+    chrom_dtype = snp_info["Chrom"].dtype
+    if pd.api.types.is_numeric_dtype(chrom_dtype):
+        prot_chrom = pd.to_numeric(gene_info["CHROM"], errors="coerce").astype(chrom_dtype).values
+    else:
+        prot_chrom = gene_info["CHROM"].astype(str).values
+    prot_start = gene_info["START"].values
+    prot_end = gene_info["END"].values
+
+    is_blockwgt = isinstance(weights, BlockWgt)
+    if not is_blockwgt:
+        missing = [p for p in pids if p not in weights.columns]
+        if missing:
+            raise ValueError(f"weights DataFrame missing columns for: {missing[:5]}{'...' if len(missing) > 5 else ''}")
+        weights = weights.reindex(snp_info.index).fillna(0.0)[pids]
+
+    cis_numer = np.zeros(len(pids))
+    trans_numer = np.zeros(len(pids))
+    cis_denom = np.zeros(len(pids))
+    trans_denom = np.zeros(len(pids))
+
+    block_iter = snp_info.groupby("Block")
+    for rg_idx, (block_idx, block_info) in enumerate(
+        tqdm(block_iter, desc="Computing PWAS Z", disable=not verbose)
+    ):
+        block_snps = block_info.index
+        if is_blockwgt:
+            block_w = weights.read_block(rg_idx, columns=pids)
+        else:
+            block_w = weights.loc[block_snps].values
+
+        freq = block_info["A1Freq"].values
+        scale = np.sqrt(2 * freq * (1 - freq))
+        block_w = block_w * scale[:, None]
+
+        block_z = gwas_z.loc[block_snps].values
+
+        snp_chrom = block_info["Chrom"].values
+        snp_pos = block_info["PhysPos"].values
+        chrom_match = snp_chrom[:, None] == prot_chrom[None, :]
+        cis_mask = chrom_match & (
+            snp_pos[:, None] >= (prot_start - cis_window)[None, :]
+        ) & (snp_pos[:, None] <= (prot_end + cis_window)[None, :])
+
+        w_cis = block_w * cis_mask
+        w_trans = block_w * ~cis_mask
+
+        cis_numer += w_cis.T @ block_z
+        trans_numer += w_trans.T @ block_z
+
+        eig = ldm.read_block_eig(int(block_idx))
+        proj_cis = eig["U"].T @ w_cis
+        proj_trans = eig["U"].T @ w_trans
+        cis_denom += (proj_cis ** 2 * eig["lambdas"][:, None]).sum(axis=0)
+        trans_denom += (proj_trans ** 2 * eig["lambdas"][:, None]).sum(axis=0)
+
+    return pd.DataFrame({
+        "ID": pids,
+        "CIS_Z": cis_numer / np.sqrt(np.maximum(cis_denom, 1e-30)),
+        "TRANS_Z": trans_numer / np.sqrt(np.maximum(trans_denom, 1e-30)),
+    })
 
 
 def compute_coreg(

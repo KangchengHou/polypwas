@@ -15,6 +15,19 @@ datasets/
 │   └── {group}/{pid}.{par,log,AnnoJointProb,AnnoPerSnpHsqEnrichment}
 │                                  # SBayesRC training artefacts (per-SNP .tsv.gz weights are backed up to /n/scratch/...)
 │
+├── sbayesrc/        →  /n/groups/price/UKBiobank/UKBPPP/DATA/
+│   ├── ukbEUR_HM3/                # SBayesRC eigendecomposition LD (1.15M HM3 SNPs)
+│   │   ├── block{1..591}.eigen.bin
+│   │   ├── snp.info
+│   │   ├── ldm.info
+│   │   └── snplist.txt
+│   ├── ukbEUR_Imputed/            # SBayesRC eigendecomposition LD (7.3M imputed SNPs)
+│   │   ├── block{1..591}.eigen.bin
+│   │   ├── snp.info
+│   │   ├── ldm.info
+│   │   └── snplist.txt
+│   └── annot_baseline2.2.txt      # baseline-LD v2.2 annotations
+│
 ├── gwas/
 │   ├── price2/{trait}.sumstats.gz    # 32 UKB BOLT-LMM traits (excluding PPP overlap)
 │   ├── pass/{trait}.sumstats.gz      # 56 PASS consortium traits
@@ -67,7 +80,7 @@ The primary group used by polypwas is `ukbsun.imputed.baseline+cis+pqtl`.
 
 - **pQTL sumstats** arrive as per-protein `.ma.gz` files from the upstream pqtl repo with rows aligned to the LDM SNP order (columns `freq, b, se, N, r2`; `SNP/A1/A2` are implicit via the LDM `snp.info`). polypwas does not re-align them.
 - **GWAS sumstats** are formatted to `.ma` (`SNP A1 A2 freq b se p N`) by `compile_*_sumstats.py` in *GWAS Compilation*.
-- **LDM reference**: `ukbEUR_HM3` is the default LD panel; `ukbEUR_Imputed` is used for the main imputed weight set. Eigendecomposition LD lives at `/n/groups/price/UKBiobank/UKBPPP/DATA/{ukbEUR_HM3,ukbEUR_Imputed}/`.
+- **LDM reference**: `ukbEUR_HM3` is the default LD panel; `ukbEUR_Imputed` is used for the main imputed weight set. Eigendecomposition LD lives under `datasets/sbayesrc/`.
 - **Individual-level UKB data** (genotype, protein, trait values) are restricted to the EUR unrelated subset and the imputation/accuracy split fixed in `*.indivlist` files (see `datasets/ukbppp/`).
 - All paths are configurable via `~/.polypwas/config.yaml`; nothing should be hard-coded against `/n/groups/price/`.
 
@@ -204,7 +217,7 @@ Test whether PWAS-significant proteins are enriched for rare-variant burden hits
 
 # Simulation
 
-FPR/power simulations for PWAS method validation. Depends on the `ukbEUR_HM3` SBayesRC LDM at `/n/groups/price/UKBiobank/UKBPPP/DATA/ukbEUR_HM3/`. Runs independently of GWAS/PWAS stages.
+FPR/power simulations for PWAS method validation. Depends on the `ukbEUR_HM3` SBayesRC LDM at `datasets/sbayesrc/ukbEUR_HM3/`. Runs independently of GWAS/PWAS stages.
 
 ## 13. Run simulations
 

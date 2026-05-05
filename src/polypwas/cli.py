@@ -3,9 +3,23 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 from .config import DEFAULT_CONFIG, write_config
+
+logger = logging.getLogger("polypwas")
+
+
+def _setup_logging(verbose: bool) -> None:
+    if logger.handlers:
+        logger.setLevel(logging.INFO if verbose else logging.WARNING)
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%H:%M:%S"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO if verbose else logging.WARNING)
+    logger.propagate = False
 from .demo import (
     compute_demo_pwas,
     prepare_demo_resources,
@@ -51,15 +65,30 @@ def build_parser() -> argparse.ArgumentParser:
 
     assoc_parser = subparsers.add_parser(
         "assoc",
-        help="Compute demo cis and trans PWAS Z-scores from explicit input files",
+        help="Compute cis and trans PWAS Z-scores (single or many proteins)",
     )
-    assoc_parser.add_argument("--weights", type=Path, required=True)
+    assoc_parser.add_argument(
+        "--weights",
+        type=Path,
+        nargs="+",
+        required=True,
+        help="One or more per-protein weight files (with BETA column), or a single .parquet BlockWgt",
+    )
     assoc_parser.add_argument("--gwas", type=Path, required=True)
     assoc_parser.add_argument("--ldm-dir", type=Path, required=True)
-    assoc_parser.add_argument("--gene-info", type=Path)
-    assoc_parser.add_argument("--gene-chr", type=str)
-    assoc_parser.add_argument("--gene-start", type=int)
-    assoc_parser.add_argument("--gene-end", type=int)
+    assoc_parser.add_argument(
+        "--gene-info",
+        type=Path,
+        required=True,
+        help="TSV with columns ID, CHROM, START, END (single weight file uses first row)",
+    )
+    assoc_parser.add_argument(
+        "--out",
+        type=Path,
+        help="Output TSV path (required when computing >1 protein)",
+    )
+    assoc_parser.add_argument("--cis-window", type=float, default=1e6)
+    assoc_parser.add_argument("--verbose", action="store_true", help="Show per-block progress bar")
     assoc_parser.set_defaults(handler=handle_assoc)
 
     return parser
@@ -113,18 +142,107 @@ def handle_train(args: argparse.Namespace) -> int:
 
 
 def handle_assoc(args: argparse.Namespace) -> int:
-    """Compute and print demo cis/trans PWAS Z-scores."""
-    cis_z, trans_z = compute_demo_pwas(
-        weights_path=args.weights,
-        gwas_path=args.gwas,
-        ldm_dir=args.ldm_dir,
-        gene_info_path=args.gene_info,
-        gene_chr=args.gene_chr,
-        gene_start=args.gene_start,
-        gene_end=args.gene_end,
+    """Compute cis/trans PWAS Z-scores for one or many proteins."""
+    weights_paths = list(args.weights)
+    is_parquet = len(weights_paths) == 1 and weights_paths[0].suffix == ".parquet"
+
+    import pandas as pd
+
+    from .ld import BlockLDM
+    from .pwas import compute_pwas_z
+    from .store import BlockWgt
+
+    single_file = len(weights_paths) == 1 and not is_parquet
+    if single_file and args.out is None:
+        gene_row = pd.read_csv(args.gene_info, sep="\t").iloc[0]
+        cis_z, trans_z = compute_demo_pwas(
+            weights_path=weights_paths[0],
+            gwas_path=args.gwas,
+            ldm_dir=args.ldm_dir,
+            gene_chr=gene_row["CHROM"],
+            gene_start=int(gene_row["START"]),
+            gene_end=int(gene_row["END"]),
+            cis_window=args.cis_window,
+        )
+        print(f"CIS_Z={cis_z:.6f}")
+        print(f"TRANS_Z={trans_z:.6f}")
+        return 0
+
+    if args.out is None:
+        raise SystemExit("--out is required for multi-protein assoc")
+
+    _setup_logging(args.verbose)
+
+    logger.info("Loading LDM from %s", args.ldm_dir)
+    ldm = BlockLDM(str(args.ldm_dir))
+    snp_info = ldm.snp_info
+    logger.info("LDM: %d SNPs across %d blocks", len(snp_info), ldm.n_block)
+
+    logger.info("Loading gene info from %s", args.gene_info)
+    gene_info = pd.read_csv(args.gene_info, sep="\t", index_col="ID")
+    logger.info("Gene info: %d proteins", len(gene_info))
+
+    logger.info("Loading GWAS from %s", args.gwas)
+    gwas = pd.read_csv(args.gwas, sep="\t", index_col="SNP")
+    gwas_z = (gwas.loc[snp_info.index, "b"] / gwas.loc[snp_info.index, "se"]).astype(float)
+    logger.info("GWAS Z aligned: %d/%d SNPs", gwas_z.notna().sum(), len(snp_info))
+
+    if is_parquet:
+        logger.info("Opening weights parquet %s", weights_paths[0])
+        weights = BlockWgt(str(weights_paths[0]))
+        available = set(weights.columns)
+        pids = [p for p in gene_info.index if p in available]
+        if not pids:
+            raise SystemExit("No protein IDs in --gene-info match parquet columns")
+        dropped = len(gene_info) - len(pids)
+        if dropped:
+            logger.warning("Dropped %d gene-info IDs not in parquet", dropped)
+        gene_info = gene_info.loc[pids]
+        logger.info(
+            "Parquet: %d proteins selected; file has %d columns × %d SNPs",
+            len(pids), weights.n_features, weights.n_snp,
+        )
+    else:
+        logger.info("Reading %d per-protein weight files", len(weights_paths))
+        cols = {}
+        for path in weights_paths:
+            pid = path.name
+            for suf in (".tsv.gz", ".tsv", ".gz"):
+                if pid.endswith(suf):
+                    pid = pid[: -len(suf)]
+                    break
+            df = pd.read_csv(path, sep="\t")
+            if "BETA" not in df.columns:
+                raise SystemExit(f"{path}: missing BETA column")
+            if "SNP" in df.columns:
+                col = df.set_index("SNP")["BETA"].reindex(snp_info.index).fillna(0.0)
+            elif len(df.columns) == 1:
+                if len(df) != len(snp_info):
+                    raise SystemExit(
+                        f"{path}: BETA-only file has {len(df)} rows, LDM has {len(snp_info)}"
+                    )
+                col = pd.Series(df["BETA"].to_numpy(), index=snp_info.index)
+            else:
+                raise SystemExit(f"{path}: need [SNP, BETA] or BETA-only")
+            cols[pid] = col
+        weights = pd.DataFrame(cols)
+        missing = [p for p in gene_info.index if p not in weights.columns]
+        if missing:
+            raise SystemExit(f"--gene-info has IDs without weight files: {missing[:5]}")
+        weights = weights[list(gene_info.index)]
+
+    logger.info("Computing PWAS Z across %d blocks", ldm.n_block)
+    result = compute_pwas_z(
+        weights=weights,
+        gwas_z=gwas_z,
+        ldm=ldm,
+        gene_info=gene_info,
+        cis_window=args.cis_window,
+        verbose=args.verbose,
     )
-    print(f"CIS_Z={cis_z:.6f}")
-    print(f"TRANS_Z={trans_z:.6f}")
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    result.to_csv(args.out, sep="\t", index=False, float_format="%.6f")
+    logger.info("Wrote %d protein Z-scores to %s", len(result), args.out)
     return 0
 
 

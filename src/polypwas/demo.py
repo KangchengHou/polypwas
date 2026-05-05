@@ -236,7 +236,7 @@ def compute_demo_pwas(
     gene_end: int | None = None,
     cis_window: float = 1e6,
 ) -> tuple[float, float]:
-    """Compute demo cis/trans PWAS Z-scores from block-eigen LD."""
+    """Compute demo cis/trans PWAS Z-scores from block-eigen LD (single protein)."""
     ldm = BlockLDM(str(ldm_dir))
     snp_info = ldm.snp_info
 
