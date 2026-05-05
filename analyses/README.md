@@ -1,24 +1,19 @@
 # Datasets (inputs)
 
-All upstream stages assume the following inputs are staged under `datasets/` (or symlinked from external sources, e.g. `/n/groups/price/`). Nothing in `analyses/` will run until these are in place.
+Data for polypwas lives under `analyses/datasets/`. We plan to release the per-cohort pQTL sumstats and SBayesRC weights upon publication. The directory structure is:
 
 ```
 datasets/
-├── pqtl/
-│   ├── ukbsun/{pid}.tsv.gz           # UKB-PPP raw pQTL sumstats (~2,923 proteins)
-│   ├── decode/{pid}.tsv.gz           # deCODE raw pQTL sumstats (~5,000 proteins)
-│   ├── csf/{pid}.tsv.gz              # CSF raw pQTL sumstats (~6,000 aptamers)
-│   ├── {dataset}.gene.tsv            # protein → ENSG, TSS/TES, sample size, EXONS
-│   └── {dataset}.sample.tsv          # per-protein N (if not in gene.tsv)
+├── pqtl-sumstats/   →  /n/groups/price/PQTLGWAS/pqtl-sumstats/
+│   ├── {cohort}/{pid}.ma.gz       # per-protein sumstats: freq, b, se, N, r2 (rows aligned to LDM SNP order)
+│   ├── {cohort}.gene.tsv          # ID, UNIPROT, CHROM, START, END, ASSAY, ENSEMBL, EXONS
+│   ├── {cohort}.pqtl.tsv          # per-SNP boolean: pqtl_cis, pqtl_trans, pqtl_both (P < 5e-8)
+│   └── {cohort}.pqtl_count.tsv    # per-SNP integer: cis_count, trans_count, total_count
 │
-├── sbayesrc/
-│   ├── ukbEUR_HM3_ldm/               # SBayesRC eigendecomposition LD (HM3 SNPs)
-│   │   ├── block{1..591}.eigen.bin
-│   │   └── snp.info
-│   ├── ukbEUR_Imputed_ldm/           # SBayesRC eigendecomposition LD (imputed SNPs)
-│   │   ├── block{1..591}.eigen.bin
-│   │   └── snp.info
-│   └── annot_baseline2.2.txt         # baseline-LD v2.2 annotations for SBayesRC
+├── pqtl-weights/    →  /n/groups/price/PQTLGWAS/pqtl-sbayesrc/
+│   ├── {group}.parquet            # block-aligned (n_snp × n_protein) → polypwas.store.BlockWgt
+│   └── {group}/{pid}.{par,log,AnnoJointProb,AnnoPerSnpHsqEnrichment}
+│                                  # SBayesRC training artefacts (per-SNP .tsv.gz weights are backed up to /n/scratch/...)
 │
 ├── gwas/
 │   ├── price2/{trait}.sumstats.gz    # 32 UKB BOLT-LMM traits (excluding PPP overlap)
@@ -31,7 +26,7 @@ datasets/
 │   └── pops.tsv                      # PoPS pathway scores (for validation)
 │
 └── ukbppp/
-    ├── protein.pheno                 # measured protein levels (~54K individuals × ~2,923 proteins)
+    ├── protein.pheno                 # measured protein levels (~54K individuals × ~2,800 proteins)
     ├── protein.covar                 # covariates (age, sex, batch, PCs)
     ├── genotype_impute+acc/          # merged PGEN for the 62,856 imputation+accuracy individuals
     │   ├── merged.pgen
@@ -44,44 +39,50 @@ datasets/
     └── unrelated_337K.txt            # unrelated EUR individuals (for QC)
 ```
 
-Conventions:
+## Cohorts
 
-- **pQTL sumstats** are aligned to LDM reference SNPs in stage 2 (`process_pqtl.py`); raw inputs may use any column scheme as long as it carries SNP, A1, A2, BETA, SE, P, N.
-- **GWAS sumstats** are formatted to `.ma` (`SNP A1 A2 freq b se p N`) in stage 6 (`compile_*_sumstats.py`).
-- **LDM reference**: `ukbEUR_HM3` is the default LD panel; `ukbEUR_Imputed` is used for the main imputed weight set (`ukbsun.imputed.baseline+cis+pqtl`).
-- **Individual-level UKB data** (genotype, protein, trait values) are restricted to the EUR unrelated subset and the imputation/accuracy split fixed in `*.indivlist` files.
+| Cohort | Description |
+|--------|-------------|
+| `ukbsun` | Sun et al. UKB-PPP official release |
+| `ukb_linreg_0pc` | UKB-PPP linear regression, 0 protein PCs regressed out |
+| `ukb_linreg_20pc` | UKB-PPP linear regression, 20 protein PCs regressed out |
+| `decode` | deCODE plasma pQTLs (4,707 SeqIds) |
+| `csf` | Western et al. CSF pQTLs (6,597 aptamers) |
+
+## Weight groups
+
+Weight files are named `{cohort}.{snp_set}.{annot}`, with `snp_set ∈ {hm3 (1.15M SNPs), imputed (7.3M SNPs)}` and `annot ∈ {none, baseline+cis, baseline+cis+pqtl}`. Availability per in-scope cohort:
+
+| Cohort | `hm3.none` | `hm3.baseline+cis` | `hm3.baseline+cis+pqtl` | `imputed.none` | `imputed.baseline+cis` | `imputed.baseline+cis+pqtl` |
+|--------|:---:|:---:|:---:|:---:|:---:|:---:|
+| `ukbsun`           | ✓ |   | ✓ | ✓ |   | ✓ |
+| `ukb_linreg_0pc`   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `ukb_linreg_20pc`  | ✓ | ✓ | ✓ | parquet only | | ✓ |
+| `decode`           |   |   | ✓ |   |   | ✓ |
+| `csf`              |   |   | ✓ |   |   | ✓ |
+
+The primary group used by polypwas is `ukbsun.imputed.baseline+cis+pqtl`.
+
+## Conventions
+
+- **pQTL sumstats** arrive as per-protein `.ma.gz` files from the upstream pqtl repo with rows aligned to the LDM SNP order (columns `freq, b, se, N, r2`; `SNP/A1/A2` are implicit via the LDM `snp.info`). polypwas does not re-align them.
+- **GWAS sumstats** are formatted to `.ma` (`SNP A1 A2 freq b se p N`) by `compile_*_sumstats.py` in *GWAS Compilation*.
+- **LDM reference**: `ukbEUR_HM3` is the default LD panel; `ukbEUR_Imputed` is used for the main imputed weight set. Eigendecomposition LD lives at `/n/groups/price/UKBiobank/UKBPPP/DATA/{ukbEUR_HM3,ukbEUR_Imputed}/`.
+- **Individual-level UKB data** (genotype, protein, trait values) are restricted to the EUR unrelated subset and the imputation/accuracy split fixed in `*.indivlist` files (see `datasets/ukbppp/`).
 - All paths are configurable via `~/.polypwas/config.yaml`; nothing should be hard-coded against `/n/groups/price/`.
 
 ---
 
 # pQTL Compilation
 
-Format pQTL sumstats and train protein prediction weights for each cohort in `datasets/pqtl/`.
+Formatting pQTL sumstats, building pQTL annotations, and training SBayesRC weights are owned by the upstream pqtl repo at `/n/groups/price/PQTLGWAS/`. Their outputs are surfaced here as `datasets/pqtl-sumstats/` and `datasets/pqtl-weights/` (see above).
 
-## 1. Format & impute summary statistics
-
-For each protein, align raw sumstats to LDM reference SNPs (allele matching/flipping), then run SBayesRC tidy + impute.
+Two helper scripts live in this repo:
 
 | Script | Output |
 |--------|--------|
-| `process_pqtl.py` | `DATA/sumstats/{dataset}/{pid}.ma.gz` |
-| `format_ukb.py` | `DATA/sumstats/ukb_linreg_{n_pc}pc/{pid}.ma.gz` (pre-computed) |
-
-## 2. Build pQTL annotations
-
-Count genome-wide-significant (P < 5e-8) cis and trans pQTLs per SNP across all proteins.
-
-Output: `DATA/sumstats/{dataset}.pqtl.tsv` (per-SNP cis/trans/both counts)
-
-## 3. Train SBayesRC weights
-
-For each protein × cohort, train SBayesRC with functional annotations.
-
-| Script | Output |
-|--------|--------|
-| `train_sbayesrc.py` | `DATA/sbayesrc/{dataset}.{ldm}.{annot}/{pid}.tsv.gz` |
-
-Annotation models: `baseline+cis`, `baseline+cis+pqtl`. LD panels: HM3, Imputed. Runtime: ~720 min/protein via submitit.
+| `pqtl-compilation/convert_to_parquet.py` | `datasets/pqtl-weights/{group}.parquet` (block-aligned `BlockWgt`) |
+| `pqtl-compilation/make_pqtl_count.py`    | `datasets/pqtl-sumstats/{cohort}.pqtl_count.tsv` |
 
 ---
 
@@ -89,7 +90,7 @@ Annotation models: `baseline+cis`, `baseline+cis+pqtl`. LD panels: HM3, Imputed.
 
 Select independent traits and prepare GWAS sumstats from `datasets/gwas/`.
 
-## 4. Select independent traits
+## 1. Select independent traits
 
 Use LDSC genetic correlations (`ldsc_rg.txt`, `ldsc_hsq.txt`) to pick ~independent traits (r² < 0.25), prioritizing high heritability.
 
@@ -98,7 +99,7 @@ Use LDSC genetic correlations (`ldsc_rg.txt`, `ldsc_hsq.txt`) to pick ~independe
 | `ukb_indep_traits.py` | UKB BOLT-LMM | `DATA/indep_traits.tsv` |
 | `pass_indep_traits.py` | PASS consortium | `DATA/pass_indep_traits.tsv` |
 
-## 5. Compile GWAS sumstats
+## 2. Compile GWAS sumstats
 
 Format to .ma aligned with LDM reference SNPs via SBayesRC munging.
 
@@ -113,7 +114,7 @@ Format to .ma aligned with LDM reference SNPs via SBayesRC munging.
 
 Compute polygenic scores from SBayesRC weights and evaluate prediction accuracy. Depends on: pqtl-compilation (weights), gwas-compilation (trait values).
 
-## 6. Extract genotypes
+## 3. Extract genotypes
 
 Slice/merge `datasets/ukbppp/genotype_bgen/` into the merged PGEN restricted to the `acc+impute` indivlist.
 
@@ -121,7 +122,7 @@ Slice/merge `datasets/ukbppp/genotype_bgen/` into the merged PGEN restricted to 
 |--------|--------|
 | `extract_genotype.py` | `datasets/ukbppp/genotype_impute+acc/merged.{pgen,pvar,psam}` |
 
-## 7. Compute polygenic scores
+## 4. Compute polygenic scores
 
 PLINK2 `--score` using SBayesRC weights, stratified by SNP subset (cis, trans, cisgenic, cisnongenic, cisexonic, cisnonexonic).
 
@@ -129,7 +130,7 @@ PLINK2 `--score` using SBayesRC weights, stratified by SNP subset (cis, trans, c
 |--------|--------|
 | `run_prediction.py` | `DATA/prediction/{group}.{subset}.parquet` |
 
-## 8. Evaluate prediction accuracy
+## 5. Evaluate prediction accuracy
 
 Correlate predicted vs measured protein levels in held-out UKB individuals (`acc.indivlist`).
 
@@ -137,7 +138,7 @@ Correlate predicted vs measured protein levels in held-out UKB individuals (`acc
 |--------|--------|
 | `eval_ukb_acc.py` | `DATA/predacc_stats.tsv` |
 
-## 9. Variance explained in traits
+## 6. Variance explained in traits
 
 Regress predicted protein PCs on 10 UKB traits, quantify cis/trans R².
 
@@ -151,7 +152,7 @@ Regress predicted protein PCs on 10 UKB traits, quantify cis/trans R².
 
 Compute PWAS Z-scores, co-regulation matrices, and validate against independent evidence. Depends on: pqtl-compilation (weights, annotations), gwas-compilation (GWAS .ma files).
 
-## 10. Compute PWAS covariances
+## 7. Compute PWAS covariances
 
 For each protein × trait, compute Z-score numerators (weight · GWAS-z) stratified by cis/trans.
 
@@ -159,7 +160,7 @@ For each protein × trait, compute Z-score numerators (weight · GWAS-z) stratif
 |--------|--------|
 | `compute_pwas.py` | `DATA/pwas/{gwas_group}/{pqtl_group}.tsv.gz` |
 
-## 11. Compute co-regulation matrices
+## 8. Compute co-regulation matrices
 
 Protein × protein covariance (w'Rw) for cis and trans components.
 
@@ -167,7 +168,7 @@ Protein × protein covariance (w'Rw) for cis and trans components.
 |--------|--------|
 | `compute_coreg.py` | `DATA/coreg/{group}.{cis\|trans}.parquet` |
 
-## 12. Compute variance components
+## 9. Compute variance components
 
 Diagonal of co-regulation (w'Rw per protein) for Z-score denominators.
 
@@ -175,7 +176,7 @@ Diagonal of co-regulation (w'Rw per protein) for Z-score denominators.
 |--------|--------|
 | `compute_var.py` | `DATA/var/{group}.{cis\|trans}.parquet` |
 
-## 13. Compile PWAS results
+## 10. Compile PWAS results
 
 Combine covariance + variance → Z-scores, apply co-regulation PC regression (n_pc=20), bin by signal strength.
 
@@ -183,7 +184,7 @@ Combine covariance + variance → Z-scores, apply co-regulation PC regression (n
 |--------|--------|
 | `compile_pwas_df.py` | `DATA/pwas/{gwas_group}.{pqtl_group}.tsv` (CIS_Z, TRANS_Z columns) |
 
-## 14. Optimize PC regression
+## 11. Optimize PC regression
 
 Tune number of co-regulation PCs to remove using genomic jackknife. Tests n_pc ∈ {0, 5, 10, 15, 20}.
 
@@ -191,7 +192,7 @@ Tune number of co-regulation PCs to remove using genomic jackknife. Tests n_pc �
 |--------|--------|
 | `optimize_regress_pc.py` | `DATA/optimize_regress_pc/{group}.n_pc{n}.tsv` |
 
-## 15. Burden test & PoPS validation
+## 12. Burden test & PoPS validation
 
 Test whether PWAS-significant proteins are enriched for rare-variant burden hits (`burden.tsv`) and PoPS pathway scores (`pops.tsv`).
 
@@ -203,9 +204,9 @@ Test whether PWAS-significant proteins are enriched for rare-variant burden hits
 
 # Simulation
 
-FPR/power simulations for PWAS method validation. Depends on: `datasets/sbayesrc/ukbEUR_HM3_ldm/`. Runs independently of GWAS/PWAS stages.
+FPR/power simulations for PWAS method validation. Depends on the `ukbEUR_HM3` SBayesRC LDM at `/n/groups/price/UKBiobank/UKBPPP/DATA/ukbEUR_HM3/`. Runs independently of GWAS/PWAS stages.
 
-## 16. Run simulations
+## 13. Run simulations
 
 Simulate pQTL (SBayesRC MCMC) + GWAS with mediated/independent/correlated architectures, compute PWAS Z-scores across 100s of replicates.
 
