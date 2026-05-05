@@ -1,3 +1,34 @@
+# Quick demo
+
+Run cis/trans PWAS Z-scores for the first 10 (alphabetical) ukbsun proteins against the LDL-C GWAS, on both HM3 and imputed LD panels. Output is a TSV with `ID, CIS_Z, TRANS_Z`.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="/n/groups/price/kangcheng/projects/polypwas"
+DATA="$ROOT/analyses/datasets"
+OUT="$(mktemp -d -t toy_assoc.XXXXXX)"
+GENE_INFO="$OUT/gene_info.tsv"
+echo "output dir: $OUT"
+
+head -n 11 "$DATA/pqtl-sumstats/ukbsun.gene.tsv" > "$GENE_INFO"
+
+uv run --project "$ROOT" polypwas assoc --verbose \
+    --weights   "$DATA/pqtl-weights/ukbsun.hm3.baseline+cis+pqtl.parquet" \
+    --gwas      "$DATA/gwas/price2_compiled/biochemistry_LDLdirect.ma" \
+    --ldm-dir   "$DATA/sbayesrc/ukbEUR_HM3" \
+    --gene-info "$GENE_INFO" \
+    --out       "$OUT/pwas_z.hm3.tsv"
+
+uv run --project "$ROOT" polypwas assoc --verbose \
+    --weights   "$DATA/pqtl-weights/ukbsun.imputed.baseline+cis+pqtl.parquet" \
+    --gwas      "$DATA/gwas/price2_compiled/biochemistry_LDLdirect.ma" \
+    --ldm-dir   "$DATA/sbayesrc/ukbEUR_Imputed" \
+    --gene-info "$GENE_INFO" \
+    --out       "$OUT/pwas_z.imputed.tsv"
+```
+
 # Datasets (inputs)
 
 Data for polypwas lives under `analyses/datasets/`. We plan to release the per-cohort pQTL sumstats and SBayesRC weights upon publication. The directory structure is:
@@ -29,14 +60,17 @@ datasets/
 │   └── annot_baseline2.2.txt      # baseline-LD v2.2 annotations
 │
 ├── gwas/
-│   ├── price2/{trait}.sumstats.gz    # 32 UKB BOLT-LMM traits (excluding PPP overlap)
-│   ├── pass/{trait}.sumstats.gz      # 56 PASS consortium traits
-│   ├── trait_info.tsv                # trait → cohort, N, h², category
-│   ├── trait_values.tsv              # individual-level trait values for UKB traits
-│   ├── ldsc_rg.txt                   # LDSC genetic correlations (for trait independence)
-│   ├── ldsc_hsq.txt                  # LDSC heritabilities
-│   ├── burden.tsv                    # rare-variant burden test results (for validation)
-│   └── pops.tsv                      # PoPS pathway scores (for validation)
+│   ├── price2/{trait}.stats.gz          # raw UKB BOLT-LMM output (32 traits, excl. PPP overlap)
+│   ├── price2_compiled/{trait}.ma       # LDM-aligned .ma format
+│   ├── pass_sumstats/{trait}.sumstats.gz # raw PASS consortium sumstats
+│   ├── pass_compiled/{trait}.ma         # LDM-aligned .ma format
+│   ├── trait_info.tsv                   # trait → cohort, N, h², category
+│   ├── trait_values.tsv                 # individual-level trait values for UKB traits
+│   ├── indep_gwas_traits.tsv            # ~independent trait subset (LDSC r² < 0.25)
+│   ├── ldsc_rg.txt                      # LDSC genetic correlations
+│   ├── ldsc_hsq.txt                     # LDSC heritabilities
+│   ├── burden.tsv                       # rare-variant burden test results
+│   └── pops.tsv                         # PoPS pathway scores
 │
 └── ukbppp/
     ├── protein.pheno                 # measured protein levels (~54K individuals × ~2,800 proteins)
@@ -70,7 +104,7 @@ Weight files are named `{cohort}.{snp_set}.{annot}`, with `snp_set ∈ {hm3 (1.1
 |--------|:---:|:---:|:---:|:---:|:---:|:---:|
 | `ukbsun`           | ✓ |   | ✓ | ✓ |   | ✓ |
 | `ukb_linreg_0pc`   | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `ukb_linreg_20pc`  | ✓ | ✓ | ✓ | parquet only | | ✓ |
+| `ukb_linreg_20pc`  | ✓ | ✓ | ✓ | parquet only |   | ✓ |
 | `decode`           |   |   | ✓ |   |   | ✓ |
 | `csf`              |   |   | ✓ |   |   | ✓ |
 
@@ -79,8 +113,8 @@ The primary group used by polypwas is `ukbsun.imputed.baseline+cis+pqtl`.
 ## Conventions
 
 - **pQTL sumstats** arrive as per-protein `.ma.gz` files from the upstream pqtl repo with rows aligned to the LDM SNP order (columns `freq, b, se, N, r2`; `SNP/A1/A2` are implicit via the LDM `snp.info`). polypwas does not re-align them.
-- **GWAS sumstats** are formatted to `.ma` (`SNP A1 A2 freq b se p N`) by `compile_*_sumstats.py` in *GWAS Compilation*.
-- **LDM reference**: `ukbEUR_HM3` is the default LD panel; `ukbEUR_Imputed` is used for the main imputed weight set. Eigendecomposition LD lives under `datasets/sbayesrc/`.
+- **GWAS sumstats** are formatted to `.ma` (`SNP A1 A2 freq b se p N`) by `compile_*_sumstats.py` in *GWAS Compilation*; outputs land in `gwas/{price2,pass}_compiled/`.
+- **LDM reference**: `ukbEUR_Imputed` is the primary LD panel (matches `ukbsun.imputed.baseline+cis+pqtl`); `ukbEUR_HM3` is used for the smaller HM3 weight set and for simulation. Eigendecomposition LD lives under `datasets/sbayesrc/`.
 - **Individual-level UKB data** (genotype, protein, trait values) are restricted to the EUR unrelated subset and the imputation/accuracy split fixed in `*.indivlist` files (see `datasets/ukbppp/`).
 - All paths are configurable via `~/.polypwas/config.yaml`; nothing should be hard-coded against `/n/groups/price/`.
 

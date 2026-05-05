@@ -37,6 +37,7 @@ EXAMPLE_RELEASE_TAG = "angptl3-ldl-example"
 EXAMPLE_PQTL_PATH = EXAMPLES_DIR / "angptl3.ma.gz"
 EXAMPLE_GWAS_PATH = EXAMPLES_DIR / "ldl.ma.gz"
 EXAMPLE_WGTS_PATH = EXAMPLES_DIR / "angptl3.wgts.gz"
+EXAMPLE_GENE_INFO_PATH = EXAMPLES_DIR / "angptl3.gene.tsv"
 EXAMPLE_ASSET_URLS = {
     EXAMPLE_PQTL_PATH.name: f"{EXAMPLE_RELEASE_BASE_URL}/{EXAMPLE_PQTL_PATH.name}",
     EXAMPLE_GWAS_PATH.name: f"{EXAMPLE_RELEASE_BASE_URL}/{EXAMPLE_GWAS_PATH.name}",
@@ -148,10 +149,17 @@ def prepare_demo_resources(include_weights: bool = False) -> dict[str, Path]:
     """Ensure bundled example inputs and public resources are ready."""
     example_inputs = ensure_example_inputs(include_weights=include_weights)
     ldm_dir = ensure_hm3_ldm()
+    if not EXAMPLE_GENE_INFO_PATH.exists():
+        EXAMPLE_GENE_INFO_PATH.write_text(
+            "ID\tCHROM\tSTART\tEND\n"
+            f"ANGPTL3\t{EXAMPLE_GENE_COORDS['chrom']}\t"
+            f"{EXAMPLE_GENE_COORDS['start']}\t{EXAMPLE_GENE_COORDS['end']}\n"
+        )
     result = {
         "pqtl": example_inputs[EXAMPLE_PQTL_PATH.name],
         "gwas": example_inputs[EXAMPLE_GWAS_PATH.name],
         "ldm_dir": ldm_dir,
+        "gene_info": EXAMPLE_GENE_INFO_PATH,
         "gene_coords": EXAMPLE_GENE_COORDS,
     }
     if include_weights and EXAMPLE_WGTS_PATH.name in example_inputs:

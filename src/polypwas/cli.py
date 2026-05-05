@@ -100,6 +100,7 @@ def handle_download_example(args: argparse.Namespace) -> int:
     print(f"Example pQTL: {resources['pqtl']}")
     print(f"Example GWAS: {resources['gwas']}")
     print(f"HM3 LD: {resources['ldm_dir']}")
+    print(f"Gene info: {resources['gene_info']}")
     if "weights" in resources:
         print(f"Pre-trained weights: {resources['weights']}")
     coords = resources["gene_coords"]

@@ -84,13 +84,12 @@ def test_cli_demo_path_outputs_expected_format(tmp_path: Path):
     # Example-data prep assumptions used by the demo flow
     assert (EXAMPLES / "angptl3.ma.gz").exists()
     assert (EXAMPLES / "ldl.ma.gz").exists()
-    assert not (EXAMPLES / "angptl3.gene.tsv").exists()
-
     download_result = run_cli("download-example")
     assert "Example pQTL:" in download_result.stdout
     assert (HM3_DIR / "snp.info").exists()
     assert (HM3_DIR / "ldm.info").exists()
     assert (HM3_DIR / "block1.eigen.bin").exists()
+    assert (EXAMPLES / "angptl3.gene.tsv").exists()
     assert "Demo gene coordinates: chr1:63063158-63071830" in download_result.stdout
 
     fake_home = tmp_path / "home"

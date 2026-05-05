@@ -33,7 +33,7 @@ cd polypwas
 uv sync
 ```
 
-This installs the minimal dependencies needed for the demo workflow (numpy, pandas, scipy, pyyaml, tqdm). For the full analysis pipeline (submitit, pyarrow, pgenlib, scikit-learn, statsmodels), install with:
+This installs the dependencies needed for the demo workflow and `polypwas assoc` (numpy, pandas, scipy, pyyaml, tqdm, pyarrow). For the full analysis pipeline (submitit, pgenlib, scikit-learn, statsmodels), install with:
 
 ```bash
 uv sync --extra full
@@ -62,9 +62,7 @@ polypwas assoc \
   --weights angptl3.wgts.gz \
   --gwas data/examples/ldl.ma.gz \
   --ldm-dir data/ldm/ukbEUR_HM3 \
-  --gene-chr 1 \
-  --gene-start 63063158 \
-  --gene-end 63071830
+  --gene-info data/examples/angptl3.gene.tsv
 ```
 
 ### Option B: Quick demo (assoc only, no R/SBayesRC needed)
@@ -77,18 +75,31 @@ polypwas assoc \
   --weights data/examples/angptl3.wgts.gz \
   --gwas data/examples/ldl.ma.gz \
   --ldm-dir data/ldm/ukbEUR_HM3 \
-  --gene-chr 1 \
-  --gene-start 63063158 \
-  --gene-end 63071830
+  --gene-info data/examples/angptl3.gene.tsv
 ```
+
+### Option C: Batch (many proteins, single trait)
+
+`polypwas assoc` also accepts a single `.parquet` `BlockWgt` file (n_snp × n_protein, block-aligned) plus a multi-row `--gene-info` and writes a TSV with `ID, CIS_Z, TRANS_Z`:
+
+```bash
+polypwas assoc --verbose \
+  --weights   ukbsun.imputed.baseline+cis+pqtl.parquet \
+  --gwas      biochemistry_LDLdirect.ma \
+  --ldm-dir   ukbEUR_Imputed \
+  --gene-info ukbsun.gene.tsv \
+  --out       pwas_z.tsv
+```
+
+See `analyses/README.md` for the in-cluster dataset layout and a runnable example.
 
 ### Expected output
 
 With the bundled ANGPTL3 + LDL example, `polypwas assoc` prints:
 
 ```text
-CIS_Z=17.213785
-TRANS_Z=-44.954875
+CIS_Z=17.209574
+TRANS_Z=-45.684548
 ```
 
 (Exact values may vary slightly depending on SBayesRC random seed when training your own weights.)
@@ -154,19 +165,9 @@ rs4475691   T  C  0.199300  -0.001188   0.004159   0.7752     442817
 ...
 ```
 
-### Single-gene coordinates (`--gene-chr`, `--gene-start`, `--gene-end`)
-
-For a single gene, you can provide the cis-window anchor directly instead of a gene-info table. `polypwas assoc` accepts `--gene-chr`, `--gene-start`, and `--gene-end`.
-
-```text
---gene-chr 1
---gene-start 63063158
---gene-end 63071830
-```
-
 ### Gene info (`--gene-info`)
 
-For multiple genes, provide a tab-separated gene-info table with `ID`, `CHROM`, `START`, and `END`. `polypwas assoc` uses the first row of that table.
+A tab-separated table with `ID`, `CHROM`, `START`, `END`. For a single weight file, the first row is used; for batch mode (parquet weights or many `.tsv.gz` files), every row is matched against the protein IDs.
 
 ```text
 ID       CHROM     START       END
