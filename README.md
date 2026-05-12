@@ -1,9 +1,8 @@
 # polypwas
 
-Code base for [Functionally informed cis and trans proteome-wide association studies prioritize disease-critical genes](https://www.medrxiv.org/content/10.64898/2026.04.24.26351667v1).
+Code for [Functionally informed cis and trans proteome-wide association studies prioritize disease-critical genes](https://www.medrxiv.org/content/10.64898/2026.04.24.26351667v1).
 
 > **Note:** This repository is still under active development.
-
 
 ## Prerequisites
 
@@ -31,12 +30,6 @@ Requires Python `>=3.9` and [uv](https://docs.astral.sh/uv/).
 git clone git@github.com:kangchenghou/polypwas.git
 cd polypwas
 uv sync
-```
-
-This installs the dependencies needed for the demo workflow and `polypwas assoc` (numpy, pandas, scipy, pyyaml, tqdm, pyarrow). For the full analysis pipeline (submitit, pgenlib, scikit-learn, statsmodels — needed for the scripts under `analyses/`), install with:
-
-```bash
-uv sync --extra full
 ```
 
 Then configure external tool paths and validate that `Rscript` can load SBayesRC:
@@ -135,13 +128,6 @@ https://gctbhub.cloud.edu.au/data/SBayesRC/resources/v2.0/LD/HapMap3/ukbEUR_HM3.
 
 If automatic download fails, you can manually download from the [SBayesRC Google Drive mirror](https://drive.google.com/drive/folders/1uxnxDjRJPzo0dTpFnERS5N2NGZX5S-sU) and extract into `data/ldm/`.
 
-> **Maintainer note:** The public example bundle is published as the GitHub release `angptl3-ldl-example`. To refresh those downloadable assets, run:
->
-> ```bash
-> gh release upload angptl3-ldl-example \
->   data/examples/angptl3.ma.gz data/examples/ldl.ma.gz angptl3.wgts.gz --clobber
-> ```
-
 ## File formats
 
 ### pQTL summary statistics (`--pqtl`)
@@ -207,17 +193,3 @@ rs4970383 A -0.000004 0.000351 0.0325 0
 rs4475691 T -0.000013 0.000375 0.0270 0
 ...
 ```
-
-## Development
-
-Install dev dependencies and run the test suite:
-
-```bash
-uv sync --extra dev
-uv run pytest
-```
-
-Tests that require external data (`analyses/external/`) or downloaded example files (`data/examples/`) are automatically skipped when those paths are absent.
-
-## Notes
-This repository was developed with assistance from AI coding software, including Claude Code and Codex.
