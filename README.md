@@ -33,7 +33,7 @@ cd polypwas
 uv sync
 ```
 
-This installs the dependencies needed for the demo workflow and `polypwas assoc` (numpy, pandas, scipy, pyyaml, tqdm, pyarrow). For the full analysis pipeline (submitit, pgenlib, scikit-learn, statsmodels), install with:
+This installs the dependencies needed for the demo workflow and `polypwas assoc` (numpy, pandas, scipy, pyyaml, tqdm, pyarrow). For the full analysis pipeline (submitit, pgenlib, scikit-learn, statsmodels — needed for the scripts under `analyses/`), install with:
 
 ```bash
 uv sync --extra full
@@ -42,9 +42,10 @@ uv sync --extra full
 Then configure external tool paths and validate that `Rscript` can load SBayesRC:
 
 ```bash
-polypwas setup                              # interactive prompt
-polypwas setup --rscript /path/to/Rscript   # non-interactive
+polypwas setup --rscript /path/to/Rscript --plink2 /path/to/plink2
 ```
+
+> **Note:** `polypwas setup` is only required if you intend to run `polypwas train`. `polypwas assoc` with pre-trained weights does not call Rscript or plink2.
 
 ### Option A: Full demo (train + assoc)
 
@@ -57,6 +58,7 @@ polypwas train \
   --ldm-dir data/ldm/ukbEUR_HM3 \
   --threads 10 \
   --out angptl3.wgts.gz
+# Optional: --annot /path/to/annot.txt   SBayesRC annotation file (e.g. baseline-LD v2.2)
 
 polypwas assoc \
   --weights angptl3.wgts.gz \
@@ -84,12 +86,31 @@ polypwas assoc \
 
 ```bash
 polypwas assoc --verbose \
-  --weights   ukbsun.imputed.baseline+cis+pqtl.parquet \
-  --gwas      biochemistry_LDLdirect.ma \
-  --ldm-dir   ukbEUR_Imputed \
-  --gene-info ukbsun.gene.tsv \
-  --out       pwas_z.tsv
+  --weights   /path/to/weights.parquet \
+  --gwas      /path/to/gwas.ma \
+  --ldm-dir   /path/to/ldm-dir \
+  --gene-info /path/to/gene.tsv \
+  --out       /path/to/pwas_z.tsv
 ```
+
+Alternatively, pass multiple per-protein `.tsv.gz` weight files (each with a `SNP` and `BETA` column, or a `BETA`-only column with rows aligned to the LDM SNP order):
+
+```bash
+polypwas assoc \
+  --weights   /path/to/prot1.tsv.gz /path/to/prot2.tsv.gz \
+  --gwas      /path/to/gwas.ma \
+  --ldm-dir   /path/to/ldm-dir \
+  --gene-info /path/to/gene.tsv \
+  --out       /path/to/pwas_z.tsv
+```
+
+**Key `polypwas assoc` flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--cis-window` | `1000000` | Cis window in bp around the gene body |
+| `--verbose` | off | Show per-block progress bar when running batch mode |
+| `--out` | required for batch | Output TSV path; omit for single-protein (prints to stdout) |
 
 See `analyses/README.md` for the in-cluster dataset layout and a runnable example.
 
@@ -186,6 +207,17 @@ rs4970383 A -0.000004 0.000351 0.0325 0
 rs4475691 T -0.000013 0.000375 0.0270 0
 ...
 ```
+
+## Development
+
+Install dev dependencies and run the test suite:
+
+```bash
+uv sync --extra dev
+uv run pytest
+```
+
+Tests that require external data (`analyses/external/`) or downloaded example files (`data/examples/`) are automatically skipped when those paths are absent.
 
 ## Notes
 This repository was developed with assistance from AI coding software, including Claude Code and Codex.

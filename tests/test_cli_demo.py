@@ -6,6 +6,7 @@ import textwrap
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +14,11 @@ SRC = ROOT / "src"
 EXAMPLES = ROOT / "data" / "examples"
 HM3_DIR = ROOT / "data" / "ldm" / "ukbEUR_HM3"
 DEMO_COORDS = {"chrom": "1", "start": "63063158", "end": "63071830"}
+
+_needs_example_data = pytest.mark.skipif(
+    not (EXAMPLES / "angptl3.ma.gz").exists(),
+    reason="data/examples/ not present; run 'polypwas download-example' first",
+)
 
 
 def run_cli(
@@ -80,6 +86,7 @@ def write_fake_rscript(script_path: Path) -> None:
     script_path.chmod(0o755)
 
 
+@_needs_example_data
 def test_cli_demo_path_outputs_expected_format(tmp_path: Path):
     # Example-data prep assumptions used by the demo flow
     assert (EXAMPLES / "angptl3.ma.gz").exists()
@@ -118,7 +125,7 @@ def test_cli_demo_path_outputs_expected_format(tmp_path: Path):
     assert "Running SBayesRC training..." in train_result.stdout
     assert "fake SBayesRC training start" in train_result.stdout
     assert "fake OMP_NUM_THREADS=10" in train_result.stdout
-    assert f"Wrote demo weights to {weights_path}" in train_result.stdout
+    assert f"Wrote weights to {weights_path}" in train_result.stdout
 
     weights_df = pd.read_csv(weights_path, sep="\t")
     assert list(weights_df.columns) == ["BETA"]

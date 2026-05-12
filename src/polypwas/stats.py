@@ -511,9 +511,9 @@ def pseudo_rsq(model):
 
 def bootstrap_median_stderr(values, n_bootstrap=1000):
     """Bootstrap standard error of the median."""
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     bootstrap_medians = [
-        np.median(np.random.choice(values, size=len(values), replace=True))
+        np.median(rng.choice(values, size=len(values), replace=True))
         for _ in range(n_bootstrap)
     ]
     return np.std(bootstrap_medians)

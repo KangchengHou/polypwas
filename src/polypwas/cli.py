@@ -1,4 +1,4 @@
-"""Public command-line interface for the demo workflow."""
+"""Public command-line interface for the polypwas workflow."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ import logging
 from pathlib import Path
 
 from .config import DEFAULT_CONFIG, write_config
+from .resource import prepare_example_resources
+from .sbayesrc import validate_runtime, build_sbayesrc_ma
 
 logger = logging.getLogger("polypwas")
 
@@ -20,12 +22,6 @@ def _setup_logging(verbose: bool) -> None:
     logger.addHandler(handler)
     logger.setLevel(logging.INFO if verbose else logging.WARNING)
     logger.propagate = False
-from .demo import (
-    compute_demo_pwas,
-    prepare_demo_resources,
-    train_demo_weights,
-)
-from .sbayesrc import validate_runtime
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -54,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     train_parser = subparsers.add_parser(
         "train",
-        help="Create demo SNP weights from an explicit pQTL input file",
+        help="Train SNP weights from a pQTL input file using SBayesRC",
     )
     train_parser.add_argument("--pqtl", type=Path, required=True)
     train_parser.add_argument("--ldm-dir", type=Path, required=True)
@@ -96,7 +92,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def handle_download_example(args: argparse.Namespace) -> int:
     """Ensure the public example resources are present locally."""
-    resources = prepare_demo_resources(include_weights=args.include_weights)
+    resources = prepare_example_resources(include_weights=args.include_weights)
     print(f"Example pQTL: {resources['pqtl']}")
     print(f"Example GWAS: {resources['gwas']}")
     print(f"HM3 LD: {resources['ldm_dir']}")
@@ -129,50 +125,62 @@ def handle_setup(args: argparse.Namespace) -> int:
 
 
 def handle_train(args: argparse.Namespace) -> int:
-    """Run explicit SBayesRC-backed training."""
+    """Train SBayesRC weights from a pQTL input file."""
+    import gzip
+    import shutil
+    import tempfile
+    from .sbayesrc import train as sbayesrc_train
+
     validate_runtime()
-    out_path = train_demo_weights(
-        pqtl_path=args.pqtl,
-        ldm_dir=args.ldm_dir,
-        out_path=args.out,
-        annot_path=args.annot,
-        threads=args.threads,
-    )
-    print(f"Wrote demo weights to {out_path}")
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    print("Preparing SBayesRC input...")
+    ma_df = build_sbayesrc_ma(pqtl_path=args.pqtl, ldm_dir=args.ldm_dir)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        ma_path = Path(tmp_dir) / "train.ma"
+        sbayesrc_prefix = Path(tmp_dir) / "sbayesrc_weights"
+        ma_df.to_csv(ma_path, sep="\t", index=False)
+        print("Running SBayesRC training...")
+        sbayesrc_train(
+            ma_path=str(ma_path),
+            ldm_dir=str(args.ldm_dir),
+            annot_path=None if args.annot is None else str(args.annot),
+            out_prefix=str(sbayesrc_prefix),
+            threads=args.threads,
+        )
+        trained_weights_path = Path(f"{sbayesrc_prefix}.txt")
+        if not trained_weights_path.exists():
+            raise FileNotFoundError(
+                f"Expected SBayesRC weights file not found: {trained_weights_path}"
+            )
+        if out_path.suffix == ".gz":
+            with trained_weights_path.open("rb") as src, gzip.open(out_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+        else:
+            shutil.copyfile(trained_weights_path, out_path)
+
+    print(f"Wrote weights to {out_path}")
     return 0
 
 
 def handle_assoc(args: argparse.Namespace) -> int:
     """Compute cis/trans PWAS Z-scores for one or many proteins."""
-    weights_paths = list(args.weights)
-    is_parquet = len(weights_paths) == 1 and weights_paths[0].suffix == ".parquet"
-
     import pandas as pd
-
     from .ld import BlockLDM
     from .pwas import compute_pwas_z
     from .store import BlockWgt
 
+    weights_paths = list(args.weights)
+    is_parquet = len(weights_paths) == 1 and weights_paths[0].suffix == ".parquet"
     single_file = len(weights_paths) == 1 and not is_parquet
-    if single_file and args.out is None:
-        gene_row = pd.read_csv(args.gene_info, sep="\t").iloc[0]
-        cis_z, trans_z = compute_demo_pwas(
-            weights_path=weights_paths[0],
-            gwas_path=args.gwas,
-            ldm_dir=args.ldm_dir,
-            gene_chr=gene_row["CHROM"],
-            gene_start=int(gene_row["START"]),
-            gene_end=int(gene_row["END"]),
-            cis_window=args.cis_window,
-        )
-        print(f"CIS_Z={cis_z:.6f}")
-        print(f"TRANS_Z={trans_z:.6f}")
-        return 0
+    to_stdout = single_file and args.out is None
 
-    if args.out is None:
-        raise SystemExit("--out is required for multi-protein assoc")
-
-    _setup_logging(args.verbose)
+    if not to_stdout:
+        if args.out is None:
+            raise SystemExit("--out is required for multi-protein assoc")
+        _setup_logging(args.verbose)
 
     logger.info("Loading LDM from %s", args.ldm_dir)
     ldm = BlockLDM(str(args.ldm_dir))
@@ -181,6 +189,8 @@ def handle_assoc(args: argparse.Namespace) -> int:
 
     logger.info("Loading gene info from %s", args.gene_info)
     gene_info = pd.read_csv(args.gene_info, sep="\t", index_col="ID")
+    if to_stdout:
+        gene_info = gene_info.iloc[:1]
     logger.info("Gene info: %d proteins", len(gene_info))
 
     logger.info("Loading GWAS from %s", args.gwas)
@@ -241,9 +251,14 @@ def handle_assoc(args: argparse.Namespace) -> int:
         cis_window=args.cis_window,
         verbose=args.verbose,
     )
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    result.to_csv(args.out, sep="\t", index=False, float_format="%.6f")
-    logger.info("Wrote %d protein Z-scores to %s", len(result), args.out)
+
+    if to_stdout:
+        print(f"CIS_Z={result['CIS_Z'].iloc[0]:.6f}")
+        print(f"TRANS_Z={result['TRANS_Z'].iloc[0]:.6f}")
+    else:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        result.to_csv(args.out, sep="\t", index=False, float_format="%.6f")
+        logger.info("Wrote %d protein Z-scores to %s", len(result), args.out)
     return 0
 
 

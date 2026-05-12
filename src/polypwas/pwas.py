@@ -417,6 +417,7 @@ def compute_coreg(
 
     subsets = list(subsets)
     result_dict = {mask: 0.0 for mask in subsets}
+    pids = list(wgt_paths.keys())
 
     for block_idx, block_info in tqdm(snp_info.groupby("Block")):
         nsnp = len(block_info)
@@ -436,7 +437,7 @@ def compute_coreg(
             result_dict[mask] += ldm.block_cov(idx=block_idx, mat=wgt_mat * mask_dict[mask])
 
     return {
-        mask: pd.DataFrame(result_dict[mask], index=wgt_mat.columns, columns=wgt_mat.columns)
+        mask: pd.DataFrame(result_dict[mask], index=pids, columns=pids)
         for mask in subsets
     }
 

@@ -2,10 +2,16 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 from pathlib import Path
 
 EXTERNAL = Path(__file__).parent.parent / "analyses" / "external"
 LDM_DIR = EXTERNAL / "ldm" / "ukbEUR_Imputed"
+
+pytestmark = pytest.mark.skipif(
+    not LDM_DIR.exists(),
+    reason="analyses/external/ not present; skipping smoke tests",
+)
 PQTL_GROUP = "ukbsun.imputed.baseline+cis+pqtl"
 SBAYESRC_DIR = EXTERNAL / "pqtl" / "sbayesrc" / PQTL_GROUP
 GWAS_DIR = EXTERNAL / "gwas" / "price2_compiled"
