@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import shutil
 import os
+from pathlib import Path
 from .config import get_config
 
 
@@ -165,6 +166,40 @@ def munge_sumstats(
             env=_thread_env(threads),
         )
         shutil.move(out_prefix + ".imp_ma", out)
+
+
+def build_sbayesrc_ma(pqtl_path, ldm_dir) -> pd.DataFrame:
+    """Build an SBayesRC-compatible .ma table from a pQTL input file.
+
+    Required columns: SNP, freq, b, se, N. A1/A2 are pulled from
+    ldm_dir/snp.info if absent; p is derived from b/se if absent.
+    """
+    import scipy.stats
+
+    pqtl_df = pd.read_csv(pqtl_path, sep="\t")
+    required = {"SNP", "freq", "b", "se", "N"}
+    missing = required - set(pqtl_df.columns)
+    if missing:
+        raise ValueError(f"pQTL input missing required columns: {sorted(missing)}")
+
+    if {"A1", "A2"}.issubset(pqtl_df.columns):
+        ma_df = pqtl_df.copy()
+    else:
+        snp_info = pd.read_csv(
+            Path(ldm_dir) / "snp.info", sep="\t", usecols=["ID", "A1", "A2"]
+        )
+        ma_df = pqtl_df.merge(
+            snp_info, left_on="SNP", right_on="ID", how="left", validate="many_to_one"
+        ).drop(columns=["ID"])
+
+    if ma_df[["A1", "A2"]].isna().any().any():
+        raise ValueError("Could not attach A1/A2 alleles for all SNPs from ldm_dir/snp.info")
+
+    if "p" not in ma_df.columns:
+        zscore = (ma_df["b"] / ma_df["se"]).astype(float)
+        ma_df["p"] = scipy.stats.norm.sf(np.abs(zscore)) * 2
+
+    return ma_df[["SNP", "A1", "A2", "freq", "b", "se", "p", "N"]]
 
 
 def summarize_signif_pqtl(

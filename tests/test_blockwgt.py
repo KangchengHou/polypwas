@@ -4,6 +4,7 @@ import time
 import os
 import numpy as np
 import pandas as pd
+import pytest
 from glob import glob
 from pathlib import Path
 import tempfile
@@ -18,6 +19,11 @@ sys.stdout.reconfigure(line_buffering=True)
 
 EXTERNAL = Path(__file__).parent.parent / "analyses" / "external"
 LDM_DIR = str(EXTERNAL / "ldm" / "ukbEUR_Imputed")
+
+pytestmark = pytest.mark.skipif(
+    not (EXTERNAL / "ldm" / "ukbEUR_Imputed").exists(),
+    reason="analyses/external/ not present; skipping BlockWgt tests",
+)
 GROUP = "ukbsun.imputed.baseline+cis+pqtl"
 N_TEST_BLOCKS = 5
 N_TEST_GWAS = 3

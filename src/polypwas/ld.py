@@ -77,7 +77,7 @@ class BlockLDM:
         """
         ldm = self.read_block_mat(idx)
         snps = self.snp_info[self.snp_info["Block"] == idx].index
-        assert np.array_equal(snps, mat.index), f"SNPs do not match"
+        assert np.array_equal(snps, mat.index), "SNPs do not match"
 
         if isinstance(mat, pd.DataFrame):
             return pd.DataFrame(ldm @ mat.values, index=mat.index, columns=mat.columns)
@@ -91,7 +91,7 @@ class BlockLDM:
     def block_qf(self, idx: int, mat):
         """Compute quadratic form diag(mat.T @ LD @ mat) for one block."""
         snps = self.snp_info[self.snp_info["Block"] == idx].index
-        assert np.array_equal(snps, mat.index), f"SNPs do not match"
+        assert np.array_equal(snps, mat.index), "SNPs do not match"
 
         ldm = self.read_block_mat(idx)
         mat_values = mat.values
@@ -111,7 +111,7 @@ class BlockLDM:
             mat_values = mat
         else:
             snps = self.snp_info[self.snp_info["Block"] == idx].index
-            assert np.array_equal(snps, mat.index), f"SNPs do not match"
+            assert np.array_equal(snps, mat.index), "SNPs do not match"
             mat_values = mat.values
 
         if eigen:

@@ -27,7 +27,6 @@ class BlockWgt:
     def __init__(self, path: str):
         self._path = path
         self._pf = pq.ParquetFile(path)
-        meta = self._pf.schema_arrow.metadata or {}
         self._feature_cols = [
             c for c in self._pf.schema_arrow.names if c not in ("chrom", "pos")
         ]
