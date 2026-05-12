@@ -47,7 +47,7 @@ polypwas setup --rscript /path/to/Rscript --plink2 /path/to/plink2
 
 > **Note:** `polypwas setup` is only required if you intend to run `polypwas train`. `polypwas assoc` with pre-trained weights does not call Rscript or plink2.
 
-### Option A: Full demo (train + assoc)
+### Option A: Protein model training + PWAS association
 
 This downloads example pQTL/GWAS summary statistics and the HM3 LD reference (~3 GB), trains SBayesRC weights (~3 min), and computes PWAS Z-scores.
 
@@ -67,7 +67,7 @@ polypwas assoc \
   --gene-info data/examples/angptl3.gene.tsv
 ```
 
-### Option B: Quick demo (assoc only, no R/SBayesRC needed)
+### Option B: PWAS association
 
 If you want to skip training entirely, download pre-trained weights from the GitHub release:
 
@@ -80,7 +80,7 @@ polypwas assoc \
   --gene-info data/examples/angptl3.gene.tsv
 ```
 
-### Option C: Batch (many proteins, single trait)
+### Option C: Batch mode for PWAS association
 
 `polypwas assoc` also accepts a single `.parquet` `BlockWgt` file (n_snp × n_protein, block-aligned) plus a multi-row `--gene-info` and writes a TSV with `ID, CIS_Z, TRANS_Z`:
 
