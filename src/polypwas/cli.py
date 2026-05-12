@@ -215,13 +215,25 @@ def handle_assoc(args: argparse.Namespace) -> int:
         )
     else:
         logger.info("Reading %d per-protein weight files", len(weights_paths))
+
+        # Build a case-insensitive stem→gene_info_id lookup for multi-file matching.
+        # Stem = everything before the first '.' in the filename (e.g. "angptl3" from
+        # "angptl3.wgts.gz"). For single-file mode we skip this and use gene_info directly.
+        gene_info_lower = {gid.lower(): gid for gid in gene_info.index}
+
         cols = {}
         for path in weights_paths:
-            pid = path.name
-            for suf in (".tsv.gz", ".tsv", ".gz"):
-                if pid.endswith(suf):
-                    pid = pid[: -len(suf)]
-                    break
+            if single_file:
+                pid = gene_info.index[0]
+            else:
+                stem = path.name.split(".")[0].lower()
+                pid = gene_info_lower.get(stem)
+                if pid is None:
+                    raise SystemExit(
+                        f"{path.name}: stem '{stem}' does not match any gene-info ID "
+                        f"(available: {list(gene_info.index[:5])})"
+                    )
+
             df = pd.read_csv(path, sep="\t")
             if "BETA" not in df.columns:
                 raise SystemExit(f"{path}: missing BETA column")
@@ -236,6 +248,7 @@ def handle_assoc(args: argparse.Namespace) -> int:
             else:
                 raise SystemExit(f"{path}: need [SNP, BETA] or BETA-only")
             cols[pid] = col
+
         weights = pd.DataFrame(cols)
         missing = [p for p in gene_info.index if p not in weights.columns]
         if missing:

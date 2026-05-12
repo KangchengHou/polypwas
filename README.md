@@ -35,7 +35,7 @@ uv sync
 Then configure external tool paths and validate that `Rscript` can load SBayesRC:
 
 ```bash
-polypwas setup --rscript /path/to/Rscript --plink2 /path/to/plink2
+polypwas setup --rscript /path/to/Rscript
 ```
 
 > **Note:** `polypwas setup` is only required if you intend to run `polypwas train`. `polypwas assoc` with pre-trained weights does not call Rscript or plink2.
